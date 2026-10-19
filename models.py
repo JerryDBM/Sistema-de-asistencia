@@ -1,6 +1,6 @@
 from datetime import datetime, time
 from sqlalchemy import (
-    String, Integer, DateTime, Time, ForeignKey, UniqueConstraint, Text
+    String, Integer, DateTime, Time, ForeignKey, UniqueConstraint, Text, Boolean
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from database import Base
@@ -18,6 +18,18 @@ class Student(Base):
     )
 
 
+class User(Base):
+    __tablename__ = "usuarios"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    email: Mapped[str] = mapped_column(String(254), unique=True, index=True, nullable=False)
+    password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
+    role: Mapped[str] = mapped_column(String(20), nullable=False, default="professor")
+    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now, nullable=False)
+    classes: Mapped[list["Class"]] = relationship(back_populates="professor")
+
+
 class Class(Base):
     __tablename__ = "clases"
 
@@ -26,10 +38,14 @@ class Class(Base):
     start_time: Mapped[time] = mapped_column(Time, nullable=False)
     tolerance_minutes: Mapped[int] = mapped_column(Integer, nullable=False, default=10)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
+    professor_id: Mapped[int | None] = mapped_column(
+        ForeignKey("usuarios.id", ondelete="SET NULL"), nullable=True, index=True
+    )
 
     students: Mapped[list[Student]] = relationship(
         secondary="clase_estudiante", back_populates="classes"
     )
+    professor: Mapped[User | None] = relationship(back_populates="classes")
     sessions: Mapped[list["AttendanceSession"]] = relationship(back_populates="course")
 
 

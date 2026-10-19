@@ -1,4 +1,4 @@
-AulaCheck es un sistema de asistencia académica en desarrollo. Actualmente incluye una API construida con FastAPI y una interfaz de escritorio para el profesor desarrollada con PySide6. La interfaz consulta el backend y permite gestionar clases, estudiantes y sesiones de asistencia.
+AulaCheck es un sistema de asistencia académica en desarrollo con una API FastAPI y una interfaz de escritorio PySide6. Incluye inicio de sesión para administradores y profesores, administración de cuentas y asignación de clases.
 
 > **Estado actual:** esta es una versión de desarrollo local. La integración completa con la aplicación Flutter, la lectura física del QR mediante ESP32-CAM y la validación criptográfica de tokens dinámicos todavía están pendientes.
 
@@ -7,7 +7,8 @@ AulaCheck es un sistema de asistencia académica en desarrollo. Actualmente incl
 ### Interfaz de escritorio (PySide6)
 
 - Consultar las clases disponibles en el backend.
-- Crear clases y asignarles un NRC.
+- Acceso con cuenta de profesor; la cuenta debe estar activa.
+- Gestionar estudiantes y asistencia solo en las clases asignadas al profesor.
 - Consultar y gestionar los estudiantes vinculados a una clase.
 - Vincular estudiantes mediante su correo institucional, siempre que estén registrados en la tabla `estudiantes`.
 - Configurar la tolerancia de asistencia de una clase.
@@ -20,6 +21,9 @@ AulaCheck es un sistema de asistencia académica en desarrollo. Actualmente incl
 
 ### Backend (FastAPI)
 
+- Inicio de sesión con contraseñas almacenadas con hash y tokens de acceso.
+- Rutas administrativas protegidas para crear, activar, desactivar, cambiar contraseña y eliminar profesores.
+- Asignar cada clase a un profesor activo. Un profesor puede tener varias clases.
 - Crear y consultar clases.
 - Generar NRC para las nuevas clases.
 - Vincular estudiantes a clases.
@@ -39,6 +43,7 @@ AulaCheck es un sistema de asistencia académica en desarrollo. Actualmente incl
 - Uvicorn
 - PySide6
 - Requests
+- PyJWT y pwdlib (hash de contraseñas)
 
 ## Requisitos previos
 
@@ -108,17 +113,29 @@ CORS_ORIGINS=*
 
 Cambia `DB_USER` y `DB_PASSWORD` según la configuración de tu computador. No compartas ni subas el archivo `.env` a GitHub, porque contiene credenciales locales.
 
-## 5. Crear tablas y cargar datos de prueba
+## 5. Crear administrador y datos de prueba
 
-Con MySQL encendido y el entorno virtual activado, ejecuta:
+Define `AUTH_SECRET_KEY` en `.env` con un valor aleatorio de al menos 32 caracteres. Puedes generarlo con:
+
+```powershell
+python -c "import secrets; print(secrets.token_urlsafe(48))"
+```
+
+Guarda el resultado en la línea `AUTH_SECRET_KEY=` de `.env`. Con MySQL encendido y el entorno virtual activado, crea el primer administrador:
+
+```powershell
+python crear_admin.py
+```
+
+Para la prueba local puedes escribir usuario `admin` y contraseña `admin` (no uses esa contraseña fuera de pruebas locales). El asistente confirma los datos dos veces. Si ya existe un administrador, te ofrecerá restablecer sus credenciales. Después podrás agregar y administrar profesores desde la interfaz.
+
+Opcionalmente puedes cargar los datos de muestra:
 
 ```powershell
 python seed.py
 ```
 
-El script carga los datos de prueba definidos en `seed.py`, incluyendo estudiantes ficticios y una clase de ejemplo con NRC `10001`. Si el proyecto utiliza otros datos de prueba, revisa ese archivo antes de ejecutarlo.
-
-La API crea las tablas al arrancar si todavía no existen.
+El script carga estudiantes ficticios y una clase de ejemplo si está definido en `seed.py`. Al iniciar, la API crea tablas nuevas y agrega `professor_id` a instalaciones existentes; las clases previas quedan inicialmente sin asignar para que el administrador las asigne.
 
 ## 6. Ejecutar el sistema
 
@@ -138,24 +155,23 @@ Direcciones locales:
 
 Si el comando no encuentra `main`, comprueba que PowerShell esté ubicado en la carpeta que contiene `main.py`.
 
-### Terminal 2: iniciar PySide6
+### Terminal 2: iniciar la aplicación de escritorio
 
-Ejecuta el nombre del archivo de interfaz que esté incluido en el repositorio. Si el archivo actualizado se llama `aulacheck_pyside_v3_documentado.py`, utiliza:
+Ejecuta:
 
 ```powershell
-python aulacheck_pyside_v3_documentado.py
+python interfaz.py
 ```
 
-Si el repositorio mantiene el nombre `aulacheck_pyside_v3.py`, utiliza ese nombre en su lugar. La interfaz necesita que FastAPI esté funcionando en `http://127.0.0.1:8000`.
+La pantalla presenta pestañas separadas para administrador y profesor. El profesor inicia sesión con el correo y contraseña que le asignó el administrador. La interfaz usa `http://127.0.0.1:8000` por defecto; se puede cambiar definiendo `AULACHECK_API_URL`.
 
 ## 7. Probar la interfaz
 
-1. Inicia el backend y abre la interfaz.
-2. Comprueba que se cargan las clases y los estudiantes disponibles.
-3. Crea una clase de prueba o selecciona una existente.
+1. Inicia el backend y abre `interfaz.py`.
+2. Inicia sesión como administrador, agrega un profesor con correo y contraseña, y crea/asigna una clase.
+3. Cierra sesión e inicia como profesor con las credenciales creadas.
 4. Vincula un estudiante cuyo correo ya esté registrado en `estudiantes`.
-5. Inicia la sesión de asistencia.
-6. Registra la asistencia de un estudiante desde la interfaz.
+5. Inicia la sesión de asistencia y registra la asistencia desde la interfaz.
 7. Para probar un registro externo, abre `/docs` y usa `GET /sessions?nrc=EL_NRC` para localizar la sesión. Utiliza el **ID de la sesión**, no el NRC, en las rutas `/sessions/{id}/...`.
 8. Registra una asistencia desde `POST /sessions/{id}/attendance/manual` con un cuerpo como:
 
@@ -191,9 +207,16 @@ ORDER BY a.registered_at DESC;
 | Método | Ruta | Función |
 |---|---|---|
 | `GET` | `/health` | Comprobar que la API responde |
-| `GET` | `/students/by-email/{email}` | Buscar estudiante por correo |
-| `GET` | `/classes` | Listar clases |
-| `POST` | `/classes` | Crear una clase y generar su NRC |
+| `POST` | `/auth/login` | Iniciar sesión de administrador o profesor |
+| `GET` | `/auth/me` | Consultar la cuenta autenticada |
+| `GET/POST` | `/admin/professors` | Listar o crear profesores (solo administrador) |
+| `PATCH` | `/admin/professors/{id}/status` | Activar o desactivar profesor |
+| `PUT` | `/admin/professors/{id}/password` | Cambiar contraseña de profesor |
+| `DELETE` | `/admin/professors/{id}` | Eliminar profesor; sus clases quedan sin asignar |
+| `PATCH` | `/admin/classes/{nrc}/professor` | Asignar o reasignar profesor |
+| `GET` | `/students/by-email/{email}` | Buscar estudiante (solo administrador) |
+| `GET` | `/classes` | Listar clases visibles para la cuenta |
+| `POST` | `/classes` | Crear clase y asignarla a un profesor (solo administrador) |
 | `GET` | `/classes/{nrc}` | Consultar una clase |
 | `PATCH` | `/classes/{nrc}/tolerance?tolerance_minutes=30` | Cambiar la tolerancia |
 | `POST` | `/classes/{nrc}/students` | Vincular estudiante por correo |
@@ -224,9 +247,8 @@ La lógica exacta de puntualidad depende de la hora programada de la clase, la t
 - Integrar la aplicación móvil Flutter para generar y mostrar QR dinámicos.
 - Implementar validación criptográfica y expiración real del token QR. El endpoint de escaneo disponible no debe considerarse una validación de seguridad completa mientras esto no esté implementado.
 - Integrar la cámara ESP32-CAM y los indicadores LED físicos.
-- Añadir autenticación y autorización para profesores.
-- Incorporar migraciones de base de datos y endurecer la configuración para producción.
-- Configurar dependencias de la interfaz en `requirements.txt` para que una sola instalación incluya todas las dependencias necesarias.
+- Validar criptográficamente y expirar de forma real los tokens QR.
+- Adoptar migraciones versionadas con Alembic y endurecer la configuración para producción.
 
 ## Seguridad
 
