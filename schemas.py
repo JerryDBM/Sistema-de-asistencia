@@ -37,8 +37,7 @@ class SessionOut(BaseModel):
 
 class AttendanceScan(BaseModel):
     email: str
-    # El token se conectará a la validación del QR dinámico en una siguiente etapa.
-    token: str | None = None
+    
 
 
 class ManualAttendance(BaseModel):

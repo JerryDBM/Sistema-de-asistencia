@@ -1,69 +1,58 @@
-AulaCheck es un sistema de asistencia académica en desarrollo. Actualmente incluye una API construida con FastAPI y una interfaz de escritorio para el profesor desarrollada con PySide6. La interfaz consulta el backend y permite gestionar clases, estudiantes y sesiones de asistencia.
+# AulaCheck
 
-> **Estado actual:** esta es una versión de desarrollo local. La integración completa con la aplicación Flutter, la lectura física del QR mediante ESP32-CAM y la validación criptográfica de tokens dinámicos todavía están pendientes.
+Sistema local de asistencia académica. Incluye una API FastAPI conectada a MySQL, una interfaz de escritorio para el docente hecha con PySide6 y una app Flutter para que cada estudiante consulte y muestre su QR fijo.
 
-## Funcionalidades actuales
+## Estado actual
 
-### Interfaz de escritorio (PySide6)
+- El docente puede crear clases, vincular estudiantes existentes, iniciar y finalizar sesiones, registrar asistencia manual, consultar el historial y exportar un CSV.
+- La app Flutter solicita el correo institucional a la API. Si ese correo está registrado, muestra el nombre y un QR fijo cuyo contenido es el correo.
+- El endpoint QR del backend puede recibir un correo decodificado y registrar la asistencia, pero la cámara ESP32-CAM y el lector físico todavía no están integrados.
+- El QR fijo se puede copiar. El prototipo no autentica que quien escribe el correo sea su dueño, así que no debe usarse como un mecanismo seguro de identidad.
 
-- Consultar las clases disponibles en el backend.
-- Crear clases y asignarles un NRC.
-- Consultar y gestionar los estudiantes vinculados a una clase.
-- Vincular estudiantes mediante su correo institucional, siempre que estén registrados en la tabla `estudiantes`.
-- Configurar la tolerancia de asistencia de una clase.
-- Iniciar y finalizar sesiones de asistencia.
-- Registrar asistencia manual desde la interfaz.
-- Consultar la lista y el estado de asistencia de una sesión.
-- Consultar sesiones anteriores e historial, según los datos disponibles en el backend.
-- Exportar registros a CSV si se utiliza la opción de exportación de la interfaz.
-- Actualizar los datos periódicamente: la interfaz documentada consulta el backend cada 30 segundos para reflejar cambios realizados desde la API o por otros medios, siempre que la vista correspondiente vuelva a cargar esos datos.
+## Componentes principales
 
-### Backend (FastAPI)
+| Ruta o archivo | Función |
+|---|---|
+| `main.py` | API FastAPI y reglas de clases, sesiones y asistencias. |
+| `interfaz.py` | Aplicación de escritorio del docente. |
+| `database.py` | Conexión y sesiones de SQLAlchemy para MySQL. |
+| `models.py` | Tablas y relaciones de la base de datos. |
+| `schemas.py` | Formatos y validación de datos de la API. |
+| `seed.py` | Carga estudiantes y una clase ficticia para pruebas. |
+| `student_app/` | Aplicación móvil Flutter del estudiante. |
+| `.env.example` | Plantilla de variables de conexión a MySQL. |
+| `requirements.txt` | Dependencias de Python para backend e interfaz. |
 
-- Crear y consultar clases.
-- Generar NRC para las nuevas clases.
-- Vincular estudiantes a clases.
-- Crear sesiones de asistencia.
-- Registrar asistencia manual o intentos de registro por QR.
-- Consultar las asistencias registradas.
-- Finalizar sesiones y generar registros de ausencia para estudiantes sin asistencia.
-- Exponer documentación interactiva mediante Swagger UI en `/docs`.
+## Requisitos
 
-## Tecnologías
+- Windows 10 u 11.
+- Python 3.10 o posterior; se recomienda Python 3.12.
+- MySQL Server iniciado. MySQL Workbench es opcional, pero facilita crear la base de datos.
+- Flutter SDK estable y agregado a `PATH`.
+- Android Studio con Android SDK, Android SDK Command-line Tools, Platform Tools y un emulador Android. Si el build solicita un NDK específico, instala la versión exacta indicada por el error desde **SDK Manager → SDK Tools → Show Package Details → NDK (Side by side)**.
+- VS Code con las extensiones **Python**, **Pylance**, **Flutter** y **Dart**.
 
-- Python
-- FastAPI
-- SQLAlchemy
-- MySQL
-- PyMySQL
-- Uvicorn
-- PySide6
-- Requests
-
-## Requisitos previos
-
-Cada integrante debe tener instalado:
-
-- Python 3.10 o una versión compatible con las dependencias del proyecto.
-- MySQL Server y MySQL Workbench (o un cliente equivalente).
-- Git, si va a clonar el repositorio.
-
-Los comandos siguientes se ejecutan desde la carpeta raíz del repositorio, donde se encuentran `main.py`, `requirements.txt`, `seed.py` y el archivo de la interfaz.
-
-## 1. Descargar el proyecto
-
-Si todavía no tienes el repositorio en tu computador, clónalo usando la URL del repositorio de AulaCheck:
+Comprueba las herramientas con:
 
 ```powershell
-git clone URL_DEL_REPOSITORIO
-cd NOMBRE_DE_LA_CARPETA
+python --version
+flutter --version
+flutter doctor
 ```
 
-Sustituye `URL_DEL_REPOSITORIO` por la URL real de GitHub y `NOMBRE_DE_LA_CARPETA` por la carpeta creada al clonar. Si ya tienes el repositorio, abre PowerShell en su carpeta raíz.
+Para Android, acepta las licencias si `flutter doctor` las solicita:
 
-## 2. Crear la base de datos
+```powershell
+flutter doctor --android-licenses
+```
 
-Inicia MySQL y ejecuta en MySQL Workbench:
+## Preparación inicial
+
+Ejecuta estos pasos una sola vez desde la carpeta raíz del repositorio, donde está `main.py`.
+
+### 1. Crear la base de datos
+
+Inicia MySQL y ejecuta en MySQL Workbench o en otro cliente SQL:
 
 ```sql
 CREATE DATABASE aulacheck
@@ -71,163 +60,145 @@ CHARACTER SET utf8mb4
 COLLATE utf8mb4_unicode_ci;
 ```
 
-Si la base de datos ya existe, no hace falta volver a crearla.
+Si la base ya existe, omite este paso.
 
-## 3. Crear el entorno e instalar dependencias
+### 2. Crear el entorno de Python e instalar dependencias
 
-Abre PowerShell en la carpeta raíz del proyecto y ejecuta:
+Abre una terminal de PowerShell en la raíz del repositorio:
 
 ```powershell
 python -m venv .venv
-.\.venv\Scripts\Activate.ps1
-python -m pip install -r requirements.txt
-python -m pip install PySide6 requests
-```
-
-El último comando instala las dependencias de la interfaz si todavía no están incluidas en `requirements.txt`. Si PowerShell no permite activar el entorno virtual, puedes usar directamente su Python:
-
-```powershell
+.\.venv\Scripts\python.exe -m pip install --upgrade pip
 .\.venv\Scripts\python.exe -m pip install -r requirements.txt
-.\.venv\Scripts\python.exe -m pip install PySide6 requests
 ```
 
-Si el equipo tiene varias instalaciones de Python, asegúrate de utilizar el mismo intérprete para instalar dependencias y ejecutar el proyecto.
+`requirements.txt` incluye FastAPI, SQLAlchemy, PyMySQL, PySide6 y requests. No necesitas instalar PySide6 o requests por separado.
 
-## 4. Configurar MySQL
+### 3. Configurar MySQL
 
-Copia `.env.example` y crea un archivo llamado `.env` en la raíz del proyecto. Completa las credenciales de tu instalación local de MySQL:
-
-```env
-DB_HOST=127.0.0.1
-DB_PORT=3306
-DB_NAME=aulacheck
-DB_USER=root
-DB_PASSWORD=TU_CONTRASEÑA
-CORS_ORIGINS=*
-```
-
-Cambia `DB_USER` y `DB_PASSWORD` según la configuración de tu computador. No compartas ni subas el archivo `.env` a GitHub, porque contiene credenciales locales.
-
-## 5. Crear tablas y cargar datos de prueba
-
-Con MySQL encendido y el entorno virtual activado, ejecuta:
+Copia la plantilla y edita las credenciales:
 
 ```powershell
-python seed.py
+Copy-Item .env.example .env
 ```
 
-El script carga los datos de prueba definidos en `seed.py`, incluyendo estudiantes ficticios y una clase de ejemplo con NRC `10001`. Si el proyecto utiliza otros datos de prueba, revisa ese archivo antes de ejecutarlo.
+En `.env`, completa `DB_USER` y `DB_PASSWORD` con los datos de tu MySQL local. El archivo `.env` está excluido de Git; no lo subas al repositorio.
 
-La API crea las tablas al arrancar si todavía no existen.
+### 4. Cargar datos ficticios (solo cuando sea necesario)
 
-## 6. Ejecutar el sistema
-
-La API y la interfaz gráfica se ejecutan en terminales separadas. Mantén ambas abiertas.
-
-### Terminal 1: iniciar FastAPI
+Con MySQL activo, desde la raíz del proyecto ejecuta:
 
 ```powershell
-python -m uvicorn main:app --reload
+.\.venv\Scripts\python.exe seed.py
 ```
 
-Direcciones locales:
+Esto crea tablas y agrega estudiantes de prueba y la clase de ejemplo con NRC `10001`. El script evita duplicar esos datos si vuelves a ejecutarlo. **No hace falta correr `seed.py` cada vez que inicias la aplicación.**
 
-- API: http://127.0.0.1:8000
-- Documentación interactiva: http://127.0.0.1:8000/docs
-- Comprobación de estado: http://127.0.0.1:8000/health
+## Ejecutar toda la aplicación
 
-Si el comando no encuentra `main`, comprueba que PowerShell esté ubicado en la carpeta que contiene `main.py`.
+Inicia MySQL primero. Después abre tres terminales de VS Code, todas en la carpeta raíz del proyecto, y deja abiertas las terminales de la API y de la interfaz.
 
-### Terminal 2: iniciar PySide6
-
-Ejecuta el nombre del archivo de interfaz que esté incluido en el repositorio. Si el archivo actualizado se llama `aulacheck_pyside_v3_documentado.py`, utiliza:
+### Terminal 1: API
 
 ```powershell
-python aulacheck_pyside_v3_documentado.py
+.\.venv\Scripts\python.exe -m uvicorn main:app --reload
 ```
 
-Si el repositorio mantiene el nombre `aulacheck_pyside_v3.py`, utiliza ese nombre en su lugar. La interfaz necesita que FastAPI esté funcionando en `http://127.0.0.1:8000`.
+La API queda en `http://127.0.0.1:8000`. Para comprobarla abre `http://127.0.0.1:8000/health`; la documentación interactiva está en `http://127.0.0.1:8000/docs`.
 
-## 7. Probar la interfaz
+### Terminal 2: interfaz del docente
 
-1. Inicia el backend y abre la interfaz.
-2. Comprueba que se cargan las clases y los estudiantes disponibles.
-3. Crea una clase de prueba o selecciona una existente.
-4. Vincula un estudiante cuyo correo ya esté registrado en `estudiantes`.
-5. Inicia la sesión de asistencia.
-6. Registra la asistencia de un estudiante desde la interfaz.
-7. Para probar un registro externo, abre `/docs` y usa `GET /sessions?nrc=EL_NRC` para localizar la sesión. Utiliza el **ID de la sesión**, no el NRC, en las rutas `/sessions/{id}/...`.
-8. Registra una asistencia desde `POST /sessions/{id}/attendance/manual` con un cuerpo como:
-
-```json
-{
-  "email": "ana.martinez@utb.edu.co"
-}
+```powershell
+.\.venv\Scripts\python.exe interfaz.py
 ```
 
-9. La interfaz actualiza sus datos cada 30 segundos. Espera ese intervalo para comprobar si el registro externo aparece; si no, utiliza la opción de recarga disponible en la interfaz y verifica primero que la API guardó el registro.
-10. Finaliza la sesión y revisa el historial.
+La interfaz se conecta a `http://127.0.0.1:8000`, así que inicia la API antes de abrirla.
 
-Para consultar una asistencia por SQL:
+### Terminal 3: app del estudiante en Android
 
-```sql
-USE aulacheck;
+Primero inicia el emulador desde Android Studio (**Tools → Device Manager**, botón ▶). Confirma que Flutter lo detecte:
 
-SELECT
-    e.full_name AS estudiante,
-    e.email,
-    s.nrc,
-    a.registered_at,
-    a.status,
-    a.source
-FROM asistencias AS a
-JOIN estudiantes AS e ON e.email = a.student_email
-JOIN sesiones_asistencia AS s ON s.id = a.session_id
-ORDER BY a.registered_at DESC;
+```powershell
+cd student_app
+flutter devices
 ```
+
+En la primera ejecución o después de cambiar dependencias, instala los paquetes Flutter:
+
+```powershell
+flutter pub get
+```
+
+Luego inicia la app, reemplazando `emulator-5554` por el ID Android que muestre `flutter devices` si es distinto:
+
+```powershell
+flutter run -d emulator-5554
+```
+
+La app ya tiene configurada `http://10.0.2.2:8000` como dirección del backend para Android Emulator. `10.0.2.2` permite que el emulador llegue al computador anfitrión. El `AndroidManifest.xml` habilita HTTP sin cifrar para desarrollo local; para publicar la app se debe usar HTTPS y retirar esa excepción.
+
+Si todavía no existe `student_app/android/`, genera una vez los archivos nativos desde `student_app/`:
+
+```powershell
+flutter create --platforms android .
+```
+
+Después revisa que `android/app/src/main/AndroidManifest.xml` tenga `android:usesCleartextTraffic="true"` dentro de `<application>` para que el emulador pueda consultar la API local por HTTP.
+
+### Ejecutar en un teléfono Android físico (opcional)
+
+Conecta el teléfono a la misma red Wi-Fi del computador y habilita la depuración USB. Inicia Uvicorn permitiendo conexiones de la red local:
+
+```powershell
+.\.venv\Scripts\python.exe -m uvicorn main:app --reload --host 0.0.0.0
+```
+
+Desde `student_app`, pasa la IP local del computador (reemplaza el ejemplo por la IP real):
+
+```powershell
+flutter run -d <ID_DEL_TELEFONO> --dart-define=API_BASE_URL=http://192.168.1.20:8000
+```
+
+Puede ser necesario permitir el puerto 8000 en el Firewall de Windows. Usa HTTP solo en la red local de desarrollo.
+
+## Probar el flujo
+
+1. Inicia MySQL, la API y la interfaz del docente.
+2. Abre la app Flutter en el emulador.
+3. Escribe un correo existente, por ejemplo `ana.martinez@utb.edu.co` si cargaste el seed.
+4. Pulsa **Mostrar mi código**. La app debe consultar el perfil y presentar su QR.
+5. Para probar un correo que no exista, espera el mensaje indicando que no está registrado.
+
+La app móvil **solo muestra** el QR. Para registrar asistencia escaneándolo se necesita una estación/lector que decodifique el correo y envíe `{"email":"correo@universidad.edu.co"}` a `POST /sessions/{id}/attendance/scan` mientras la sesión correspondiente esté activa. Esa integración física está pendiente. El docente sí puede registrar asistencia manualmente desde la interfaz.
 
 ## Endpoints principales
 
 | Método | Ruta | Función |
 |---|---|---|
-| `GET` | `/health` | Comprobar que la API responde |
-| `GET` | `/students/by-email/{email}` | Buscar estudiante por correo |
-| `GET` | `/classes` | Listar clases |
-| `POST` | `/classes` | Crear una clase y generar su NRC |
-| `GET` | `/classes/{nrc}` | Consultar una clase |
-| `PATCH` | `/classes/{nrc}/tolerance?tolerance_minutes=30` | Cambiar la tolerancia |
-| `POST` | `/classes/{nrc}/students` | Vincular estudiante por correo |
-| `GET` | `/classes/{nrc}/students` | Consultar estudiantes de una clase |
-| `POST` | `/classes/{nrc}/sessions/start` | Iniciar sesión de asistencia |
-| `POST` | `/sessions/{id}/attendance/scan` | Registrar un intento de asistencia por QR |
-| `POST` | `/sessions/{id}/attendance/manual` | Registrar asistencia manual |
-| `GET` | `/sessions/{id}/attendance` | Consultar registros de la sesión |
-| `POST` | `/sessions/{id}/finish` | Finalizar sesión y registrar ausencias |
-| `GET` | `/sessions?nrc=10001` | Consultar sesiones de una clase |
+| `GET` | `/health` | Verificar que la API responde. |
+| `GET` | `/students/by-email/{email}` | Consultar un estudiante por correo. |
+| `GET` | `/classes` | Listar clases. |
+| `POST` | `/classes` | Crear una clase y generar su NRC. |
+| `GET` | `/classes/{nrc}` | Consultar una clase. |
+| `PATCH` | `/classes/{nrc}/tolerance?tolerance_minutes=30` | Cambiar la tolerancia. |
+| `POST` | `/classes/{nrc}/students` | Vincular un estudiante existente a una clase. |
+| `GET` | `/classes/{nrc}/students` | Listar estudiantes de una clase. |
+| `POST` | `/classes/{nrc}/sessions/start` | Iniciar una sesión. |
+| `POST` | `/sessions/{id}/attendance/scan` | Registrar un intento QR enviado por un lector. |
+| `POST` | `/sessions/{id}/attendance/manual` | Registrar asistencia manual. |
+| `GET` | `/sessions/{id}/attendance` | Consultar los registros de una sesión. |
+| `POST` | `/sessions/{id}/finish` | Finalizar una sesión y marcar ausencias. |
+| `GET` | `/sessions?nrc=10001` | Consultar sesiones, opcionalmente por clase. |
 
-Consulta `/docs` para ver los esquemas y parámetros exactos de cada endpoint.
+## Solución de problemas
 
-## Reglas actuales de la demo
+- **`python` o `.venv` no se reconoce:** confirma que la terminal está en la raíz (donde existe `main.py`) y que ya ejecutaste `python -m venv .venv`.
+- **Error de MySQL o `Access denied`:** verifica que el servicio MySQL esté iniciado y revisa `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER` y `DB_PASSWORD` en `.env`.
+- **La interfaz no conecta:** comprueba que Uvicorn siga activo y que `http://127.0.0.1:8000/health` abra en el computador.
+- **El emulador no aparece:** abre el emulador en Android Studio y verifica con `flutter devices`; debe aparecer como Android y estar en línea.
+- **La app Flutter no conecta:** abre `http://10.0.2.2:8000/health` en el navegador del emulador, comprueba que Uvicorn esté activo y verifica `android:usesCleartextTraffic="true"` dentro de `<application>` en el manifiesto Android principal.
+- **Gradle dice que falta un NDK:** instala en Android Studio la versión exacta que aparece en el error desde **SDK Manager → SDK Tools → Show Package Details → NDK (Side by side)**.
 
-- Cada clase tiene un NRC.
-- Un estudiante debe estar registrado y vinculado a la clase para poder registrar su asistencia.
-- No se permite más de un registro de asistencia por estudiante en la misma sesión.
-- Los estados utilizados por el backend incluyen `present`, `tardy` y `absent`.
-- La asistencia manual se identifica con el origen `manual`.
-- Al finalizar una sesión, el backend registra como ausentes a los estudiantes que no tengan registro de asistencia.
-- La interfaz consulta periódicamente la API para reflejar cambios guardados en el backend.
+## Seguridad y limitaciones
 
-La lógica exacta de puntualidad depende de la hora programada de la clase, la tolerancia configurada y la implementación actual del backend. Revisa los resultados de la API al probar casos límite.
-
-## Limitaciones y trabajo pendiente
-
-- Integrar la aplicación móvil Flutter para generar y mostrar QR dinámicos.
-- Implementar validación criptográfica y expiración real del token QR. El endpoint de escaneo disponible no debe considerarse una validación de seguridad completa mientras esto no esté implementado.
-- Integrar la cámara ESP32-CAM y los indicadores LED físicos.
-- Añadir autenticación y autorización para profesores.
-- Incorporar migraciones de base de datos y endurecer la configuración para producción.
-- Configurar dependencias de la interfaz en `requirements.txt` para que una sola instalación incluya todas las dependencias necesarias.
-
-## Seguridad
-
-Este proyecto está pensado para desarrollo local y pruebas académicas. No uses contraseñas reales en archivos versionados, no subas `.env` ni credenciales a GitHub y no expongas el servidor de desarrollo directamente a Internet.
+Este proyecto es un prototipo para desarrollo local y pruebas académicas. No uses contraseñas reales en archivos versionados ni expongas el servidor de desarrollo a Internet. El QR fijo contiene el correo institucional y puede copiarse; la consulta del correo no equivale a iniciar sesión ni autentica la identidad del estudiante. La autenticación, la conexión segura HTTPS y la estación ESP32-CAM están pendientes.

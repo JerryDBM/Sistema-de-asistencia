@@ -236,7 +236,7 @@ def start_session(nrc: str, db: Session = Depends(get_db)):
 @app.post("/sessions/{session_id}/attendance/scan", response_model=AttendanceOut, status_code=status.HTTP_201_CREATED)
 def register_qr_attempt(session_id: int, payload: AttendanceScan, db: Session = Depends(get_db)):
     session = get_session_or_404(db, session_id)
-    # TODO: validar payload.token cuando implementemos el generador de QR dinámico en Flutter.
+    # El QR fijo contiene el correo; la estación lo decodifica y lo envía en payload.email.
     record = record_attendance(db, session, payload.email, source="qr")
     return attendance_to_out(record)
 

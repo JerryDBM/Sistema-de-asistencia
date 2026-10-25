@@ -6,3 +6,12 @@ venv/
 .pytest_cache/
 .idea/
 .vscode/
+.dart_tool/
+build/
+.flutter-plugins
+.flutter-plugins-dependencies
+**/local.properties
+**/.gradle/
+**/captures/
+**/Generated.xcconfig
+**/Flutter/ephemeral/
