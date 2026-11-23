@@ -1,4 +1,4 @@
-// This is a basic Flutter widget test.
+// Esta es una prueba automática de la interfaz que crea una ventana de la app.
 //
 // To perform an interaction with a widget in your test, use the WidgetTester
 // utility in the flutter_test package. For example, you can send tap and scroll
@@ -11,6 +11,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:aulacheck_student/main.dart';
 
 void main() {
+  // Verifica los elementos que aparecen al abrir la app y que se puede interactuar con ellos.
   testWidgets('Counter increments smoke test', (WidgetTester tester) async {
     // Build our app and trigger a frame.
     await tester.pumpWidget(const MyApp());

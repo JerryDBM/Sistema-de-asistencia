@@ -1,12 +1,12 @@
 # AulaCheck
 
-Sistema local de asistencia académica. Incluye una API FastAPI conectada a MySQL, una interfaz de escritorio para el docente hecha con PySide6 y una app Flutter para que cada estudiante consulte y muestre su QR fijo.
+Sistema local de asistencia académica. Incluye una API FastAPI conectada a MySQL, una interfaz de escritorio para el docente hecha con PySide6, una app Flutter para que cada estudiante consulte y muestre su QR fijo, y una estación ESP32-CAM que lee esos QR por WiFi.
 
 ## Estado actual
 
 - El docente puede crear clases, vincular estudiantes existentes, iniciar y finalizar sesiones, registrar asistencia manual, consultar el historial y exportar un CSV.
 - La app Flutter solicita el correo institucional a la API. Si ese correo está registrado, muestra el nombre y un QR fijo cuyo contenido es el correo.
-- El endpoint QR del backend puede recibir un correo decodificado y registrar la asistencia, pero la cámara ESP32-CAM y el lector físico todavía no están integrados.
+- La estación ESP32-CAM está integrada: al pulsar **Iniciar asistencia**, la interfaz pide fotos a la cámara por WiFi, lee el QR con OpenCV, registra la asistencia en la API y enciende el LED verde, rojo o naranja de la estación. Ver [Estación ESP32-CAM](#estación-esp32-cam).
 - El QR fijo se puede copiar. El prototipo no autentica que quien escribe el correo sea su dueño, así que no debe usarse como un mecanismo seguro de identidad.
 
 ## Componentes principales
@@ -14,7 +14,10 @@ Sistema local de asistencia académica. Incluye una API FastAPI conectada a MySQ
 | Ruta o archivo | Función |
 |---|---|
 | `main.py` | API FastAPI y reglas de clases, sesiones y asistencias. |
-| `interfaz.py` | Aplicación de escritorio del docente. |
+| `interfaz.py` | Aplicación de escritorio del docente, con el panel de la estación ESP32-CAM. |
+| `estacion.py` | Lógica de la estación: pide fotos a la ESP32-CAM, lee el QR, consulta la API y elige el LED. |
+| `firmware/aulacheck_cam/aulacheck_cam.ino` | Programa Arduino de la ESP32-CAM (cámara + WiFi + LED). |
+| `tests/` | Pruebas automáticas de la estación (no necesitan MySQL ni la placa). |
 | `database.py` | Conexión y sesiones de SQLAlchemy para MySQL. |
 | `models.py` | Tablas y relaciones de la base de datos. |
 | `schemas.py` | Formatos y validación de datos de la API. |
@@ -72,7 +75,9 @@ python -m venv .venv
 .\.venv\Scripts\python.exe -m pip install -r requirements.txt
 ```
 
-`requirements.txt` incluye FastAPI, SQLAlchemy, PyMySQL, PySide6 y requests. No necesitas instalar PySide6 o requests por separado.
+`requirements.txt` incluye FastAPI, SQLAlchemy, PyMySQL, PySide6, requests y OpenCV (versión `headless`, para que no choque con PySide6). No necesitas instalar nada por separado.
+
+> Usa **Python 3.12** si `pip install` falla con tu versión. Si tienes varias versiones instaladas, crea el entorno con `py -3.12 -m venv .venv`.
 
 ### 3. Configurar MySQL
 
@@ -82,7 +87,7 @@ Copia la plantilla y edita las credenciales:
 Copy-Item .env.example .env
 ```
 
-En `.env`, completa `DB_USER` y `DB_PASSWORD` con los datos de tu MySQL local. El archivo `.env` está excluido de Git; no lo subas al repositorio.
+En `.env`, completa `DB_USER` y `DB_PASSWORD` con los datos de tu MySQL local. `ESP32_CAM_URL` es la dirección inicial de la cámara (se puede cambiar después desde la interfaz). El archivo `.env` está excluido de Git; no lo subas al repositorio.
 
 ### 4. Cargar datos ficticios (solo cuando sea necesario)
 
@@ -169,7 +174,97 @@ Puede ser necesario permitir el puerto 8000 en el Firewall de Windows. Usa HTTP 
 4. Pulsa **Mostrar mi código**. La app debe consultar el perfil y presentar su QR.
 5. Para probar un correo que no exista, espera el mensaje indicando que no está registrado.
 
-La app móvil **solo muestra** el QR. Para registrar asistencia escaneándolo se necesita una estación/lector que decodifique el correo y envíe `{"email":"correo@universidad.edu.co"}` a `POST /sessions/{id}/attendance/scan` mientras la sesión correspondiente esté activa. Esa integración física está pendiente. El docente sí puede registrar asistencia manualmente desde la interfaz.
+La app móvil **solo muestra** el QR. La estación ESP32-CAM lo lee y la interfaz envía `{"email":"correo@universidad.edu.co"}` a `POST /sessions/{id}/attendance/scan` mientras la sesión está activa (ver la sección siguiente). El docente también puede registrar asistencia manualmente desde la interfaz.
+
+## Estación ESP32-CAM
+
+### Cómo funciona
+
+```text
+App Flutter (QR con el correo)
+        │  el estudiante lo muestra a la cámara
+        ▼
+ESP32-CAM ──WiFi──► interfaz.py (PySide6) ──HTTP──► FastAPI ──► MySQL
+   ▲  toma fotos        lee el QR con OpenCV        valida y registra
+   └──────────── LED verde / rojo / naranja ◄──── resultado
+```
+
+La placa **no** lee el QR: solo toma fotos y enciende los LED. La interfaz del docente le pide una foto cada ~0,3 s mientras la sesión está activa, busca el QR con OpenCV y envía el correo a la API. Según la respuesta, le pide a la placa encender un LED. Si el mismo QR sigue frente a la cámara, se ignora durante 6 segundos para no registrarlo dos veces.
+
+| LED | Cuándo | Lo que se ve en la interfaz |
+|---|---|---|
+| Verde | Asistencia válida, dentro de la tolerancia | «Presente» |
+| Rojo | Fuera de tolerancia, correo no registrado, no matriculado, sesión cerrada, QR que no es un correo o API caída | El motivo exacto |
+| Naranja | El estudiante ya tenía registro en esta sesión (no se crea otro) | «Ya registrado» |
+
+El LED queda encendido 2 segundos. Con buzzer (opcional) suena un pitido corto en verde, uno largo en rojo y dos cortos en naranja.
+
+### 1. Cargar el firmware (una vez)
+
+1. Instala **Arduino IDE 2.x**. En **Tools › Board › Boards Manager** instala **esp32 by Espressif Systems** (si la versión 3.x falla al descargar, la **2.0.17** funciona).
+2. Abre `firmware/aulacheck_cam/aulacheck_cam.ino`.
+3. Al inicio del archivo, en **CONFIGURACIÓN**, escribe el nombre y la clave de la red WiFi:
+   ```cpp
+   const char *WIFI_SSID = "NOMBRE_DE_LA_RED";
+   const char *WIFI_PASSWORD = "CLAVE_DE_LA_RED";
+   ```
+   La red debe ser de **2,4 GHz** y con clave normal (WPA2 personal). Las redes con página de inicio de sesión o con usuario institucional **no funcionan**. El **punto de acceso del celular** es la opción más fácil; el computador debe estar conectado a esa misma red.
+4. **Tools › Board › esp32 › AI Thinker ESP32-CAM** y **Tools › Port**: el COM de la base ESP32-CAM-MB.
+5. **Upload**. Si se queda en `Connecting....`, mantén **IO0**, pulsa **RST** y suelta IO0.
+6. Abre **Tools › Serial Monitor** a **115200** baudios y pulsa **RST**. Debe aparecer:
+   ```text
+   Cámara lista (640x480, PSRAM).
+   WiFi conectado.
+     Dirección para la interfaz: http://192.168.43.120
+   ```
+   Esa dirección es la que se escribe en la interfaz. Al arrancar, los tres LED se encienden un instante.
+
+Para comprobar la cámara sin la interfaz, abre esa dirección en el navegador del computador: hay una página con la vista en vivo y botones para probar cada LED.
+
+### 2. Conectar los LED (protoboard)
+
+| LED | Pin de la ESP32-CAM | Conexión |
+|---|---|---|
+| Verde | GPIO 13 | GPIO → resistencia 220 Ω → pata larga del LED; pata corta → GND |
+| Rojo | GPIO 14 | igual |
+| Naranja | GPIO 15 | igual |
+
+Los pines se pueden cambiar en la sección **CONFIGURACIÓN** del `.ino` (`LED_VERDE_PIN`, `LED_ROJO_PIN`, `LED_NARANJA_PIN`). El buzzer está desactivado (`BUZZER_PIN -1`); para usarlo, poner `2` y conectarlo mediante un transistor. No uses la ranura microSD: comparte esos pines.
+
+### 3. Usar la estación
+
+1. Inicia MySQL, la API (Terminal 1) y la interfaz (Terminal 2) como se explicó arriba.
+2. En el **Panel de asistencia**, escribe la dirección de la cámara en el panel **ESTACIÓN ESP32-CAM** (por ejemplo `192.168.43.120`) y pulsa **Probar**: debe aparecer una foto y «Cámara lista». La dirección se recuerda para la próxima vez.
+3. **Probar LED** enciende los tres LED uno por uno; **Flash** prende el LED blanco de la placa si hay poca luz (en pantallas de celular suele causar reflejos).
+4. Pulsa **Iniciar asistencia**. La estación empieza a leer: la vista en vivo se actualiza y cada lectura aparece en **ÚLTIMA LECTURA** y en la tabla.
+5. **Finalizar clase** detiene la lectura y apaga los LED.
+
+**Distancia recomendada:** el QR del celular a unos 15–30 cm de la cámara, con el brillo de la pantalla alto y sin reflejos.
+
+**Ojo con la tolerancia al probar:** la API compara la hora del registro con la **hora de inicio de la clase** + la tolerancia. La clase del `seed.py` empieza a las 08:00 con 10 min, así que si pruebas en otra hora el resultado será **rojo («Fuera de tolerancia»)**. Para probar el verde, crea en **Gestión de clases** una clase que empiece a la hora actual, vincula estudiantes y usa esa.
+
+### Problemas frecuentes de la estación
+
+| Síntoma | Causa probable | Solución |
+|---|---|---|
+| El Serial Monitor muestra puntos y «No se pudo conectar al WiFi» | Nombre o clave mal escritos, red de 5 GHz o red institucional con inicio de sesión | Revisa `WIFI_SSID`/`WIFI_PASSWORD`; usa el punto de acceso del celular en 2,4 GHz |
+| «Sin conexión con la cámara · reintentando» en la interfaz | IP incorrecta o el computador está en otra red | Copia la IP del Serial Monitor; conecta el PC a la misma red que la placa. Pasa el mouse sobre el mensaje para ver el detalle |
+| «La placa responde, pero la cámara no inició» | Cable plano de la cámara suelto | Revisa el conector de la OV2640 y pulsa RST |
+| `esp_camera.h: No such file or directory` al compilar | La placa elegida no es una ESP32 | Instala **esp32 by Espressif** y elige **AI Thinker ESP32-CAM** |
+| La vista funciona pero nunca lee el QR | QR pequeño, lejos, desenfocado o con reflejos | Acércalo (que ocupe ~¼ de la imagen), sube el brillo del celular, inclínalo un poco |
+| Siempre sale rojo «Fuera de tolerancia» | La clase empezó hace más que la tolerancia | Usa una clase que empiece a la hora actual (ver arriba) |
+| La placa se reinicia sola | Alimentación insuficiente | Usa un cable USB corto y un puerto directo del PC o un cargador de 5 V / 2 A |
+
+## Pruebas automáticas
+
+Las pruebas usan una base SQLite temporal y una ESP32-CAM simulada, así que no necesitan MySQL ni la placa:
+
+```powershell
+.\.venv\Scripts\python.exe -m pip install -r requirements-dev.txt
+.\.venv\Scripts\python.exe -m pytest
+```
+
+Cubren la lectura del QR en fotos de distintos tamaños, cada color de LED según la respuesta de la API, la espera para no registrar dos veces el mismo QR y la comunicación con la cámara.
 
 ## Endpoints principales
 
@@ -201,4 +296,4 @@ La app móvil **solo muestra** el QR. Para registrar asistencia escaneándolo se
 
 ## Seguridad y limitaciones
 
-Este proyecto es un prototipo para desarrollo local y pruebas académicas. No uses contraseñas reales en archivos versionados ni expongas el servidor de desarrollo a Internet. El QR fijo contiene el correo institucional y puede copiarse; la consulta del correo no equivale a iniciar sesión ni autentica la identidad del estudiante. La autenticación, la conexión segura HTTPS y la estación ESP32-CAM están pendientes.
+Este proyecto es un prototipo para desarrollo local y pruebas académicas. No uses contraseñas reales en archivos versionados ni expongas el servidor de desarrollo a Internet. El QR fijo contiene el correo institucional y puede copiarse; la consulta del correo no equivale a iniciar sesión ni autentica la identidad del estudiante. La clave del WiFi queda escrita en el `.ino`: no subas al repositorio el archivo con la clave real. La ESP32-CAM no pide contraseña: cualquiera en la misma red puede ver la cámara y encender los LED, así que úsala solo en una red de confianza. La autenticación y la conexión segura HTTPS están pendientes.

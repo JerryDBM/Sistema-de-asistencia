@@ -5,3 +5,7 @@ PyMySQL>=1.1,<2.0
 python-dotenv>=1.0,<2.0
 PySide6>=6.7,<7.0
 requests>=2.32,<3.0
+# Estación ESP32-CAM: lectura del QR en las fotos.
+# Se usa la versión "headless" para que no choque con PySide6.
+opencv-python-headless>=4.9
+numpy>=1.26

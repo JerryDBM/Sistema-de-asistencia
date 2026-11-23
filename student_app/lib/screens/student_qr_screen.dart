@@ -5,36 +5,49 @@ import 'package:qr_flutter/qr_flutter.dart';
 import '../models/student.dart';
 import '../services/student_api.dart';
 
+/// Pantalla donde el estudiante escribe su correo y consulta su código personal.
 class StudentQrScreen extends StatefulWidget {
   const StudentQrScreen({super.key});
 
   @override
+  /// Crea el objeto que conserva los datos mientras esta pantalla está abierta.
   State<StudentQrScreen> createState() => _StudentQrScreenState();
 }
 
+/// Controla los campos, la búsqueda del perfil y la presentación del código QR.
 class _StudentQrScreenState extends State<StudentQrScreen> {
+  // Campo editable donde el estudiante escribe su correo institucional.
   final _emailController = TextEditingController();
+  // Permite revisar que el correo tenga un formato válido antes de buscarlo.
   final _formKey = GlobalKey<FormState>();
+  // Servicio que consulta el perfil del estudiante en el servidor.
   final _api = StudentApi();
+  // Perfil encontrado; si todavía es nulo, se muestra el formulario de búsqueda.
   Student? _student;
+  // Indica si hay una búsqueda en curso para mostrar una animación.
   bool _loading = false;
+  // Guarda un mensaje que explica por qué falló la búsqueda, si ocurre.
   String? _error;
 
   @override
   void dispose() {
+    // Libera el campo y la conexión cuando Flutter retira esta pantalla.
     _emailController.dispose();
     _api.close();
     super.dispose();
   }
 
   Future<void> _loadStudent() async {
+    // No consulta al servidor si el correo está vacío o mal escrito.
     if (!_formKey.currentState!.validate()) return;
+    // Oculta el teclado para dejar espacio mientras se espera la respuesta.
     FocusScope.of(context).unfocus();
     setState(() {
       _loading = true;
       _error = null;
     });
 
+    // Busca el perfil y actualiza la pantalla con el resultado recibido.
     try {
       final student = await _api.findByEmail(_emailController.text.trim());
       if (!mounted) return;
@@ -58,6 +71,7 @@ class _StudentQrScreenState extends State<StudentQrScreen> {
   }
 
   void _changeStudent() {
+    // Regresa al formulario y borra los datos de la consulta anterior.
     setState(() {
       _student = null;
       _error = null;
@@ -67,6 +81,7 @@ class _StudentQrScreenState extends State<StudentQrScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // Decide qué mostrar: el formulario o el QR ya generado.
     return Scaffold(
       appBar: AppBar(
         title: const Row(
@@ -92,6 +107,7 @@ class _StudentQrScreenState extends State<StudentQrScreen> {
   }
 
   Widget _buildEntry() {
+    // Presenta instrucciones, validación del correo y el botón de búsqueda.
     return SingleChildScrollView(
       key: const ValueKey('entry'),
       padding: const EdgeInsets.fromLTRB(24, 28, 24, 32),
@@ -131,6 +147,7 @@ class _StudentQrScreenState extends State<StudentQrScreen> {
                     prefixIcon: Icon(Icons.email_outlined),
                   ),
                   onFieldSubmitted: (_) => _loadStudent(),
+                  // Explica debajo del campo qué debe corregirse si el correo no sirve.
                   validator: (value) {
                     final email = value?.trim() ?? '';
                     if (email.isEmpty) return 'Escribe tu correo institucional.';
@@ -140,6 +157,7 @@ class _StudentQrScreenState extends State<StudentQrScreen> {
                     return null;
                   },
                 ),
+                // El aviso aparece solo cuando la consulta anterior tuvo un problema.
                 if (_error != null) ...[
                   const SizedBox(height: 14),
                   _MessageBanner(message: _error!, isError: true),
@@ -173,6 +191,7 @@ class _StudentQrScreenState extends State<StudentQrScreen> {
   }
 
   Widget _buildQrCard(Student student) {
+    // Muestra el perfil y un QR cuyo contenido es el correo institucional.
     return SingleChildScrollView(
       key: const ValueKey('qr'),
       padding: const EdgeInsets.fromLTRB(24, 18, 24, 28),
@@ -229,6 +248,7 @@ class _StudentQrScreenState extends State<StudentQrScreen> {
                       borderRadius: BorderRadius.circular(18),
                       border: Border.all(color: const Color(0xFFE9EDF4)),
                     ),
+                    // Genera una imagen QR que la estación puede leer para marcar asistencia.
                     child: QrImageView(
                       data: student.email,
                       version: QrVersions.auto,
@@ -239,6 +259,7 @@ class _StudentQrScreenState extends State<StudentQrScreen> {
                     ),
                   ),
                   const SizedBox(height: 18),
+                  // Copia el correo al portapapeles por si se necesita compartirlo manualmente.
                   OutlinedButton.icon(
                     onPressed: () async {
                       await Clipboard.setData(ClipboardData(text: student.email));
@@ -266,6 +287,7 @@ class _StudentQrScreenState extends State<StudentQrScreen> {
   }
 }
 
+/// Aviso reutilizable para mostrar instrucciones o mensajes de error.
 class _MessageBanner extends StatelessWidget {
   const _MessageBanner({required this.message, required this.isError});
 
@@ -273,6 +295,7 @@ class _MessageBanner extends StatelessWidget {
   final bool isError;
 
   @override
+  /// Cambia color e icono para distinguir instrucciones de errores.
   Widget build(BuildContext context) {
     final color = isError ? const Color(0xFF9A3412) : const Color(0xFF315BD0);
     final background = isError ? const Color(0xFFFFF4E5) : const Color(0xFFEAF0FF);
