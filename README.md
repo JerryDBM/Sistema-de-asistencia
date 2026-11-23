@@ -199,6 +199,12 @@ La placa **no** lee el QR: solo toma fotos y enciende los LED. La interfaz del d
 
 El LED queda encendido 2 segundos. Con buzzer (opcional) suena un pitido corto en verde, uno largo en rojo y dos cortos en naranja.
 
+### Diagrama de estados
+
+El flujo de lectura, validación y respuesta de la estación se representa en el siguiente diagrama:
+
+![Diagrama de Estados](docs/diagrama_estados.jpg)
+
 ### 1. Cargar el firmware (una vez)
 
 1. Instala **Arduino IDE 2.x**. En **Tools › Board › Boards Manager** instala **esp32 by Espressif Systems** (si la versión 3.x falla al descargar, la **2.0.17** funciona).
